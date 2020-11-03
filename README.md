@@ -5,7 +5,7 @@ Hier ist aus Transparenzgründen der gesamte Quellcode für meine Bachelorarbeit
 
 ## Hinweis zu Datensätzen von Dritten
 
-Aus urheberrechtlichen Bedenken wurden verwendete Datensätze, die nicht vom Autor erhoben wurde, nicht mitveröffentlicht. 
+Aus urheberrechtlichen Bedenken wurden verwendete Datensätze, die nicht vom Autor selbst erhoben wurden, nicht mitveröffentlicht. 
 Für jeden dieser Datensätze ist hier angegeben, wo er erhältlich ist und unter welchem Dateinamen er im Repository abgelegt werden muss.
 Es handelt sich um folgende Datensätze:
 
