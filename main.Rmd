@@ -22,7 +22,6 @@ library(gtools)
 library(jtools)
 library(sjPlot)
 library(performance)
-source("customplots.r")
 load("results.RData")
 ```
 
