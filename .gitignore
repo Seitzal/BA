@@ -1,0 +1,16 @@
+.Rproj.user
+.Rhistory
+.Ruserdata
+*.RData
+main.tex
+*.pdf
+*.log
+*.html
+*.zip
+lit/
+main_files/
+data/*.sav
+data/parlgov_view_election.csv
+data/parlgov_view_party.csv
+data/PopuList.csv
+data/*.csv#

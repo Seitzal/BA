@@ -1,0 +1,293 @@
+---
+title: "EU-Skepsis und Wahlbeteiligung bei Wahlen zum europäischen Parlament"
+author: "A. Seitz"
+output: html_notebook
+---
+
+*This notebook contains all steps necessary to arrive at the three regression models presented in the thesis.*
+*Running all chunks in this notebook results in a file "results.RData" which is required to compile the thesis document.*
+
+# Clear workspace
+
+```{r echo=FALSE}
+rm(list = ls())
+```
+
+# Load libraries
+
+```{r echo=FALSE}
+library(tidyverse)
+library(foreign)
+library(lubridate)
+library(lme4)
+library(sjlabelled)
+library(sjPlot)
+library(jtools)
+library(rlang)
+```
+
+# Load datasets
+
+## Official turnout
+```{r echo=FALSE}
+countries <- read.csv("data/turnout.csv")
+```
+
+## European Election Study Post-Election Cross-Section 2019
+```{r echo=FALSE, warning=FALSE}
+ees2019.raw.lab <- read.spss("data/ees2019.sav", to.data.frame = TRUE)
+ees2019.raw <- read.spss("data/ees2019.sav", to.data.frame = TRUE, use.value.labels = FALSE)
+ees2019.raw$hCountry <- as.character(ees2019.raw.lab$hCountry)
+ees2019.raw <- 
+  ees2019.raw %>% 
+  mutate(hCountry = recode(hCountry, "UK" = "United Kingdom")) %>% 
+  remove_all_labels()
+rm(ees2019.raw.lab)
+```
+
+## ParlGov
+```{r echo=FALSE, warning=FALSE}
+pg <- read.csv("data/parlgov_view_election.csv") %>%
+  mutate(election_date = ymd(election_date))
+
+pg.dates.nat <-
+  pg %>%
+  filter(election_type == "parliament") %>%
+  select(Country = country_name, Date = election_date) %>%
+  mutate(Year = year(Date)) %>%
+  unique()
+
+pg.dates.ep <-
+  pg %>%
+  filter(election_type == "ep") %>%
+  select(Country = country_name, Date = election_date) %>%
+  mutate(Year = year(Date)) %>%
+  unique()
+
+pg.ep <- 
+  pg %>%
+  filter(election_type == "ep") %>%
+  mutate(Year = year(election_date)) %>%
+  filter(Year >= 2004) %>%
+  inner_join(
+    read.csv("data/parlgov_view_party.csv") %>% select(party_id, eu_anti_pro))
+```
+
+## PopuList
+```{r echo=FALSE, warning=FALSE}
+populist <- read.csv("data/PopuList.csv")
+```
+
+## Additional member state level variables
+```{r}
+addvars_countries <- read.csv("data/addvars_countries.csv")
+```
+
+# Data Processing
+
+## Calculate eurosceptic vote shares
+```{r}
+euroscep <- 
+  left_join(
+    populist %>% rename(party_id = parlgov_id),
+    pg.ep,
+    by = "party_id") %>%
+  filter((eurosceptic_startnobl <= Year & eurosceptic_endnobl > Year) | eu_anti_pro < 5) %>%
+  mutate(vote_share = vote_share %>% replace_na(0)) %>%
+  rename(Country = country_name.x) %>%
+  group_by(Country, Year) %>%
+  summarise(EuroscepticVoteShare = sum(vote_share) / 100)
+
+countries <-
+  left_join(countries, euroscep)
+
+countries$EuroscepticVoteShare[is.na(countries$EuroscepticVoteShare)] <- 0
+```
+
+## Calculate "electoral salience" (time since previous national parliament election)
+```{r}
+countries <- inner_join(countries, pg.dates.ep)
+
+last_national_election_date <- function(country, date) {
+  res <- pg.dates.nat %>% filter(Country == country & Date < date)
+  max(res$Date)
+}
+
+countries <- 
+  countries %>% 
+  mutate(last_nat = as_date(mapply(last_national_election_date, Country, Date))) %>%
+  mutate(YearsSinceLastNationalElection = as.numeric((Date - last_nat) / 365.25))
+```
+
+## Calculate number of Previous EP elections
+```{r}
+nPrev <- function(country, year) {
+  nrow(countries %>% filter(Country == country & Year < year & IsNat == 0))
+}
+
+countries <- countries %>%
+  mutate(PreviousElections = mapply(nPrev, Country, Year))
+```
+
+## Check for sunday voting
+```{r}
+countries <- countries %>% mutate(Sunday = as.factor(wday(Date) == 1))
+```
+
+## Remove duplicate rows for Bulgaria and Romania 2007
+```{r}
+countries <-
+  countries %>% filter((Country != "Bulgaria" & Country != "Romania") | Date != ymd("2007-01-01"))
+```
+
+## EES 2019 data recoding
+This is mostly to invert scales and change factor levels, and also to give variables intelligible names.
+```{r echo=FALSE}
+ees2019 <- 
+  ees2019.raw %>%
+  filter(Q6 <= 2) %>%
+  select(
+    Country = hCountry, 
+    DSN = Q3, 
+    DSEU = Q4, 
+    GovS = Q5,
+    Voted = Q6,
+    CA = Q8,
+    LR = Q11, 
+    PTN = Q18_1, 
+    PTEU = Q18_2, 
+    Econ = Q19, 
+    EUM = Q22, 
+    Unif = Q23,
+    PI = Q21, 
+    Party = Q26, 
+    Union = D1, 
+    Edu = EDU,
+    Gender = D3, 
+    Age = D4_1,
+    Partner = D5,
+    Empl = D6, 
+    Class = D7, 
+    Urban = D8, 
+    Relig = D10
+    ) %>%
+  na_if(98) %>%
+  na_if(97) %>%
+  na_if(99) %>%
+  mutate(Country = as.factor(Country)) %>%
+  mutate(DSN = 4 - DSN) %>%
+  mutate(DSEU = 4 - DSEU) %>%
+  mutate(GovS = GovS %>% replace(GovS == 2, 0)) %>%
+  mutate(Voted = Voted %>% replace(Voted == 2, 0)) %>%
+  mutate(PTN = 5 - PTN) %>%
+  mutate(PTEU = 5 - PTEU) %>%
+  mutate(Econ = 5 - Econ) %>%
+  mutate(PI = 4 - PI) %>%
+  mutate(EUM = EUM %>% 
+    replace(EUM == 2, 0) %>% 
+    replace(EUM == 1, 2) %>%
+    replace(EUM == 3, 1) %>% 
+    as.factor()) %>%
+  mutate(Party = (4 - Party) %>% replace(Party == 4, 0)) %>%
+  mutate(Union = Union %>%
+    replace(Union == 4, 0) %>%
+    replace(Union == 2, 1) %>% 
+    replace(Union == 3, 2) %>% 
+    replace(Union == 1, 2) %>% 
+    as.factor()) %>%
+  mutate(Gender = Gender %>% as.factor()) %>%
+  mutate(Age = 2019 - Age) %>%
+  mutate(Partner = as.numeric(Partner <= 8)) %>%
+  mutate(Empl = Empl %>% 
+    replace(Empl < 4, 1) %>%
+    replace(Empl >= 4, 0) %>%
+    replace(Empl == 1, 0)) %>%
+  mutate(Class = Class %>% replace(Class == 6, NA)) %>%
+  mutate(Relig = as.numeric(Relig <= 3))
+```
+
+## Clean up country-level dataset
+```{r}
+countries2019 <-
+  countries %>% 
+  filter(Year == 2019) %>% 
+  select(Country, C_EUSkep = EuroscepticVoteShare, C_ElecSal = YearsSinceLastNationalElection, C_Prev = PreviousElections, C_Sun = Sunday, Turnout) %>%
+  left_join(addvars_countries %>% select(Country, C_Comp = CompulsoryVoting, C_Simul = Simul)) %>%
+  mutate(C_Sun = as.integer(C_Sun))
+```
+
+## Merge the EES 2019 (individual-level) data with the Country (macro-level) data
+```{r}
+data.full <- left_join(ees2019, countries2019 %>% select(-Turnout))
+```
+
+## Drop rows with missing values
+```{r}
+data <- data.full %>% select(Country, Voted, DSEU, EUM, Unif, PTEU, DSN, PTN, Econ, GovS, CA, PI, Party, Union, Edu, Gender, Age, Partner, Empl, Class, Urban, Relig, C_EUSkep, C_ElecSal, C_Prev, C_Comp, C_Simul, C_Sun) %>% drop_na()
+```
+
+## Set factor response labels
+```{r}
+data$EUM = set_labels(data$EUM, labels = c("schlecht", "neutral", "gut"))
+data$Union = set_labels(data$Union, labels = c("keine", "direkt", "indirekt"))
+data$Gender = set_labels(data$Gender, labels = c("m", "w", "d"))
+```
+
+# Models
+
+## Model 0: Multilevel model with controls only
+```{r}
+mod0 <- glmer(
+  Voted ~ 
+  DSN + PTN + Econ + GovS +
+  CA + PI + Party + Union + Edu + Gender + Age + Partner + Empl + Class + Urban + Relig +
+  C_ElecSal + C_Prev + C_Comp + C_Simul + C_Sun +
+  (1 | Country),
+  data = data, family = "binomial") 
+summ(mod0, confint = TRUE)
+```
+
+## Model 1: Multilevel model with all predictors, random intercept only
+```{r warning=FALSE}
+mod1 <- glmer(
+  Voted ~ 
+  EUM + Unif + PTEU + DSEU + PTN + DSN + Econ + GovS +
+  CA + PI + Party + Union + Edu + Gender + Age + Partner + Empl + Class + Urban + Relig +
+  C_EUSkep + C_ElecSal + C_Prev + C_Comp + C_Simul + C_Sun +
+  EUM:C_EUSkep + Unif:C_EUSkep + PTEU:C_EUSkep + DSEU:C_EUSkep + 
+  (1 | Country),
+  data = data, family = "binomial") 
+summ(mod1, confint = TRUE)
+```
+
+## Model 2: Multilevel model with all predictors and random slopes for EU attitude variables
+```{r warning=FALSE}
+mod2 <- glmer(
+  Voted ~ 
+  DSEU + EUM + Unif + PTEU + DSN + PTN + Econ + GovS +
+  CA + PI + Party + Union + Edu + Gender + Age + Partner + Empl + Class + Urban + Relig +
+  C_EUSkep + C_ElecSal + C_Prev + C_Comp + C_Simul + C_Sun +
+  DSEU:C_EUSkep + EUM:C_EUSkep + Unif:C_EUSkep + PTEU:C_EUSkep +
+  (1 + DSEU + EUM + Unif + PTEU | Country),
+  data = data, family = "binomial") 
+summ(mod1, confint = TRUE)
+```
+
+## Model comparison: AIC/BIC, likelihood ratio test
+```{r}
+mod_comp <- anova(mod0, mod1, mod2)
+mod_comp
+```
+
+## Country-level OLS model
+I ended up not using this in the paper at all, but decided to keep it in here for transparency.
+```{r}
+mod_c <- lm(Turnout ~ C_EUSkep + C_ElecSal + C_Prev + C_Comp + C_Simul + C_Sun, data = countries2019) %>% scale_mod()
+summ(mod_c)
+```
+
+# Save calculation results for use in the thesis document
+
+```{r echo=FALSE}
+save.image(file = "results.RData")
+```

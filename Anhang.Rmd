@@ -1,0 +1,27 @@
+# Anhang A: Zusammensetzung der Stichprobe
+
+```{r echo = FALSE, message = FALSE}
+options(OutDec= ",")
+makeup_full <- 
+  ees2019.raw %>% 
+  group_by(hCountry) %>% 
+  tally() %>%
+  mutate(rel = round((n / sum(n)) * 100, digits = 2)) %>%
+  mutate(comp = paste(n, " (", rel, "%)", sep = "")) %>%
+  select(Mitgliedsstaat = hCountry, Gesamtstichprobe = comp)
+makeup_filtered <- 
+  data %>% 
+  group_by(Country) %>%
+  tally() %>%
+  mutate(rel = round((n / sum(n)) * 100, digits = 2)) %>%
+  mutate(comp = paste(n, " (", rel, "%)", sep = "")) %>%
+  select(Mitgliedsstaat = Country, `Gefilterte Stichprobe` = comp)
+makeup <- 
+  inner_join(makeup_full, makeup_filtered) %>% 
+  add_row(Mitgliedsstaat = "Gesamt", Gesamtstichprobe = paste(nrow(ees2019.raw), "(100%)"), `Gefilterte Stichprobe` = paste(nrow(data), "(100%)"))
+knitr::kable(makeup, caption = "Zusammensetzung der Stichprobe vor und nach dem Entfernen fehlender Werte")
+```
+
+# Anhang B: Angaben zur Transparenz
+
+Alle in der vorliegenden Arbeit enthaltenen quantitativen Analysen wurden mit R durchgeführt. Das Dokument selbst, sowie alle enthaltenen Tabellen und Abbildungen (außer Abbildungen, die aus Werken Dritter übernommen wurden) wurden ebenfalls mit R unter Verwendung von RMarkdown erstellt. Zur Gewährleistung der Nachvollziehbarkeit wurde der gesamte Quellcode für diese Arbeit unter <https://github.com/Seitzal/ba> veröffentlicht. Aus uhrheberrechtlichen Gründen wurden verwendete Datensätze, die nicht vom Autor selbst erhoben wurden, nicht mitveröffentlicht. Das Repository enthält jedoch Informationen darüber, woher diese Datensätze zu beziehen sind.

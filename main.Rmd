@@ -1,0 +1,72 @@
+---
+output:
+  pdf_document:
+    includes:
+      in_header: preamble.tex
+      before_body: titlepage.tex
+    keep_tex:  true
+csl: politische-vierteljahresschrift.csl
+bibliography: bibliography.bib
+link-citations: true
+indent: true
+fontsize: 12pt
+nocite: |
+  @talving2016
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tufte)
+library(tidyverse)
+library(gtools)
+library(jtools)
+library(sjPlot)
+library(performance)
+source("customplots.r")
+load("results.RData")
+```
+
+\tableofcontents
+
+\newpage
+
+\listoffigures
+\listoftables
+
+```{r child = 'Abkuerz.tex'}
+```
+
+\newpage
+
+\onehalfspacing
+
+```{r child = 'Einleitung.Rmd'}
+```
+
+```{r child = '1-Forschungsstand.Rmd'}
+```
+
+```{r child = '2-Hypothesen.Rmd'}
+```
+
+```{r child = '3-Analyse.Rmd'}
+```
+
+```{r child = 'Fazit.Rmd'}
+```
+
+\newpage
+
+# Literaturverzeichnis
+
+\parskip=1em
+\parindent=-2em
+\leftskip=2em
+\indent
+<div id="refs"></div>
+
+\newpage
+
+```{r child = 'Anhang.Rmd'}
+```
+
